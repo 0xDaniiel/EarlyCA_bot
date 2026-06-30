@@ -4,7 +4,8 @@ const TelegramBot =
   require("node-telegram-bot-api").default || require("node-telegram-bot-api");
 const { Anthropic } = require("@anthropic-ai/sdk");
 
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
+// const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
