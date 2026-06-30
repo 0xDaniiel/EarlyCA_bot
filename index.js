@@ -10,6 +10,30 @@ const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const alerted = new Set();
 
+bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
+  addSubscriber(chatId);
+  bot.sendMessage(chatId, "You're subscribed to memecoin alerts!");
+});
+
+const fs = require("fs");
+const SUBS_FILE = "./subscribers.json";
+
+function loadSubscribers() {
+  try {
+    return JSON.parse(fs.readFileSync(SUBS_FILE, "utf8"));
+  } catch (e) {
+    return [];
+  }
+}
+
+function addSubscriber(chatId) {
+  const subs = loadSubscribers();
+  if (!subs.includes(chatId)) {
+    subs.push(chatId);
+    fs.writeFileSync(SUBS_FILE, JSON.stringify(subs));
+  }
+}
 async function fetchNewTokens() {
   try {
     const profilesRes = await axios.get(
@@ -73,6 +97,11 @@ async function passesFilter(token) {
   const rugcheck = await getRugcheckData(token.tokenAddress);
   if (!rugcheck || rugcheck.score < 65) return false;
 
+  // Hard rejects — these override an otherwise decent Rugcheck score
+  if (rugcheck.topHolderPct > 30) return false;
+  if (rugcheck.risks.some((r) => r.name.toLowerCase().includes("rug")))
+    return false;
+
   return true;
 }
 
@@ -114,7 +143,7 @@ function formatRisk(riskScore) {
 }
 async function sendAdminAlert(message) {
   try {
-    await bot.sendMessage(ADMIN_CHAT_ID, "⚠️ BOT ERROR\n\n" + message);
+    await bot.sendMessage(ADMIN_CHAT_ID, " BOT ERROR\n\n" + message);
   } catch (e) {
     console.error("Failed to send admin alert:", e.message);
   }
@@ -198,7 +227,7 @@ async function sendAlert(token, rugcheck) {
     "-----------------",
     "SAFETY",
     "Rugcheck Score: " + (rugcheck?.score || 0) + "/100",
-    "Risk Level: " + formatRisk(rugcheck?.score || 0),
+    "Rugcheck Score Rating: " + formatRisk(rugcheck?.score || 0),
     "Total Holders: " + (rugcheck?.totalHolders || 0),
     "Top Holder: " + (rugcheck?.topHolderPct.toFixed(2) || 0) + "%",
     "LP Locked: " + (rugcheck?.lpLockedPct || 0) + "%",
@@ -220,7 +249,14 @@ async function sendAlert(token, rugcheck) {
     "Rugcheck: https://rugcheck.xyz/tokens/" + contractAddr,
   ].join("\n");
 
-  await bot.sendMessage(CHAT_ID, message);
+  const subs = loadSubscribers();
+  for (const chatId of subs) {
+    try {
+      await bot.sendMessage(chatId, message);
+    } catch (e) {
+      console.error("Failed to send to " + chatId + ":", e.message);
+    }
+  }
 }
 
 async function scan() {
