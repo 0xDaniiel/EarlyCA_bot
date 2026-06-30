@@ -115,10 +115,10 @@ async function passesFilter(token) {
     console.log(name, "failed: top holder", rugcheck.topHolderPct);
     return false;
   }
-  if (rugcheck.risks.some((r) => r.name.toLowerCase().includes("rug"))) {
-    console.log(name, "failed: rug flag");
-    return false;
-  }
+  // if (rugcheck.risks.some((r) => r.name.toLowerCase().includes("rug"))) {
+  //   console.log(name, "failed: rug flag");
+  //   return false;
+  // }
 
   return true;
 }
