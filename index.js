@@ -115,10 +115,6 @@ async function passesFilter(token) {
     console.log(name, "failed: top holder", rugcheck.topHolderPct);
     return false;
   }
-  // if (rugcheck.risks.some((r) => r.name.toLowerCase().includes("rug"))) {
-  //   console.log(name, "failed: rug flag");
-  //   return false;
-  // }
 
   return true;
 }
@@ -183,10 +179,10 @@ Top Holder: ${rugcheck?.topHolderPct.toFixed(2) || 0}%
 LP Locked: ${rugcheck?.lpLockedPct || 0}%
 Rugcheck Score: ${rugcheck?.score || 0}/100
 
-Provide:
-1. One sentence on momentum/signals
-2. Suggested exit range (e.g., 3x-5x or $100k-$150k mcap)
-3. One key risk to watch`;
+Provide in plain text only, no asterisks, no bold, no markdown:
+1. Momentum: one sentence on signals
+2. Exit range: suggested target (e.g., 3x-5x or $100k-$150k mcap)
+3. Risk: one key risk to watch`;
 
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
