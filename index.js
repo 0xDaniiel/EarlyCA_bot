@@ -26,11 +26,29 @@ function loadSubscribers() {
   }
 }
 
+function saveSubscribers(subs) {
+  fs.writeFileSync(SUBS_FILE, JSON.stringify(subs, null, 2));
+}
+
+function getSubscriber(chatId) {
+  const subs = loadSubscribers();
+  return subs.find((s) => s.chatId === chatId);
+}
+
 function addSubscriber(chatId) {
   const subs = loadSubscribers();
-  if (!subs.includes(chatId)) {
-    subs.push(chatId);
-    fs.writeFileSync(SUBS_FILE, JSON.stringify(subs));
+  if (!subs.find((s) => s.chatId === chatId)) {
+    subs.push({ chatId, alertCount: 0, subscribed: false, expiry: null });
+    saveSubscribers(subs);
+  }
+}
+
+function updateSubscriber(chatId, updates) {
+  const subs = loadSubscribers();
+  const sub = subs.find((s) => s.chatId === chatId);
+  if (sub) {
+    Object.assign(sub, updates);
+    saveSubscribers(subs);
   }
 }
 async function fetchNewTokens() {
@@ -280,9 +298,7 @@ async function sendAlert(token, rugcheck) {
     "Name: " + (token.baseToken?.name || "Unknown"),
     "Ticker: $" + (token.baseToken?.symbol || "N/A"),
     "Contract:",
-    "```",
     contractAddr,
-    "```",
     "Chain: Solana",
     "Platform: " + platform,
     "",
@@ -328,7 +344,12 @@ async function sendAlert(token, rugcheck) {
       await bot.sendMessage(chatId, message, {
         reply_markup: {
           inline_keyboard: [
-            [{ text: " Copy Contract", copy_text: { text: contractAddr } }],
+            [
+              {
+                text: " Copy Contract Address",
+                copy_text: { text: contractAddr },
+              },
+            ],
           ],
         },
       });
