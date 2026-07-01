@@ -34,29 +34,57 @@ function addSubscriber(chatId) {
   }
 }
 async function fetchNewTokens() {
+  const tokenMap = new Map();
+
+  // Source 1: DexScreener new pairs
   try {
-    const profilesRes = await axios.get(
-      "https://api.dexscreener.com/token-profiles/latest/v1",
+    const res = await axios.get(
+      "https://api.dexscreener.com/latest/dex/pairs/solana",
     );
-    const profiles = (profilesRes.data || []).filter(
-      (t) => t.chainId === "solana",
-    );
-    const tokens = [];
-    for (const profile of profiles.slice(0, 50)) {
-      try {
-        const pairRes = await axios.get(
-          "https://api.dexscreener.com/latest/dex/tokens/" +
-            profile.tokenAddress,
-        );
-        const pair = pairRes.data?.pairs?.[0];
-        if (pair) tokens.push({ ...pair, tokenAddress: profile.tokenAddress });
-      } catch (e) {}
+    const pairs = res.data?.pairs || [];
+    for (const pair of pairs.slice(0, 50)) {
+      const addr = pair.baseToken?.address;
+      if (addr && !tokenMap.has(addr)) {
+        tokenMap.set(addr, { ...pair, tokenAddress: addr });
+      }
     }
-    return tokens;
-  } catch (err) {
-    console.error("Fetch error:", err.message);
-    return [];
+  } catch (e) {
+    console.error("DexScreener fetch error:", e.message);
   }
+
+  // Source 2: Pump.fun new tokens via DexScreener
+  try {
+    const res = await axios.get(
+      "https://api.dexscreener.com/latest/dex/pairs/solana?dex=pumpfun",
+    );
+    const pairs = res.data?.pairs || [];
+    for (const pair of pairs.slice(0, 50)) {
+      const addr = pair.baseToken?.address;
+      if (addr && !tokenMap.has(addr)) {
+        tokenMap.set(addr, { ...pair, tokenAddress: addr });
+      }
+    }
+  } catch (e) {
+    console.error("Pump.fun fetch error:", e.message);
+  }
+
+  // Source 3: Raydium new pools via DexScreener
+  try {
+    const res = await axios.get(
+      "https://api.dexscreener.com/latest/dex/pairs/solana?dex=raydium",
+    );
+    const pairs = res.data?.pairs || [];
+    for (const pair of pairs.slice(0, 50)) {
+      const addr = pair.baseToken?.address;
+      if (addr && !tokenMap.has(addr)) {
+        tokenMap.set(addr, { ...pair, tokenAddress: addr });
+      }
+    }
+  } catch (e) {
+    console.error("Raydium fetch error:", e.message);
+  }
+
+  return Array.from(tokenMap.values());
 }
 
 async function getRugcheckData(tokenAddress) {
@@ -87,25 +115,51 @@ async function passesFilter(token) {
   const marketCap = token?.marketCap || 0;
   const buys = token?.txns?.h1?.buys || 0;
   const name = token?.baseToken?.symbol || "unknown";
+  const ageMs = Date.now() - (token?.pairCreatedAt || 0);
+  const ageMin = Math.floor(ageMs / 60000);
+  const isNewLaunch = ageMin < 10;
 
   if (chainId !== "solana") return false;
-  if (volume < 5000) {
-    console.log(name, "failed: low volume", volume);
-    return false;
-  }
-  if (buys < 20) {
-    console.log(name, "failed: low buys", buys);
-    return false;
-  }
-  if (liquidity === 0 && marketCap < 30000) {
-    console.log(name, "failed: low mcap");
-    return false;
-  }
-  if (liquidity > 0 && liquidity < 10000) {
-    console.log(name, "failed: low liquidity", liquidity);
-    return false;
+
+  if (isNewLaunch) {
+    // Relaxed thresholds for tokens under 10 minutes old
+    if (volume < 1000) {
+      console.log(name, "failed: new launch low volume", volume);
+      return false;
+    }
+    if (buys < 5) {
+      console.log(name, "failed: new launch low buys", buys);
+      return false;
+    }
+    if (liquidity === 0 && marketCap < 10000) {
+      console.log(name, "failed: new launch low mcap");
+      return false;
+    }
+    if (liquidity > 0 && liquidity < 3000) {
+      console.log(name, "failed: new launch low liquidity", liquidity);
+      return false;
+    }
+  } else {
+    // Existing strict thresholds for tokens over 10 minutes old
+    if (volume < 5000) {
+      console.log(name, "failed: low volume", volume);
+      return false;
+    }
+    if (buys < 20) {
+      console.log(name, "failed: low buys", buys);
+      return false;
+    }
+    if (liquidity === 0 && marketCap < 30000) {
+      console.log(name, "failed: low mcap");
+      return false;
+    }
+    if (liquidity > 0 && liquidity < 10000) {
+      console.log(name, "failed: low liquidity", liquidity);
+      return false;
+    }
   }
 
+  // Safety checks always apply regardless of age
   const rugcheck = await getRugcheckData(token.tokenAddress);
   if (!rugcheck || rugcheck.score < 65) {
     console.log(name, "failed: rugcheck score", rugcheck?.score);
