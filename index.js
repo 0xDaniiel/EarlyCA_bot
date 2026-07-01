@@ -55,7 +55,7 @@ async function fetchNewTokens() {
   // Source 2: Pump.fun new tokens via DexScreener
   try {
     const res = await axios.get(
-      "https://api.dexscreener.com/latest/dex/pairs/solana?dex=pumpfun",
+      "https://api.dexscreener.com/latest/dex/search?q=pump&chainId=solana",
     );
     const pairs = res.data?.pairs || [];
     for (const pair of pairs.slice(0, 50)) {
@@ -71,7 +71,7 @@ async function fetchNewTokens() {
   // Source 3: Raydium new pools via DexScreener
   try {
     const res = await axios.get(
-      "https://api.dexscreener.com/latest/dex/pairs/solana?dex=raydium",
+      "https://api.dexscreener.com/latest/dex/search?q=raydium&chainId=solana",
     );
     const pairs = res.data?.pairs || [];
     for (const pair of pairs.slice(0, 50)) {
