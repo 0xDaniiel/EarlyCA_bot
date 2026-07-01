@@ -143,7 +143,12 @@ function scoreToken(token, rugcheck) {
   return Math.min(Math.max(score, 1), 10);
 }
 
-function getRiskLevel(score) {
+function getRiskLevel(score, rugcheck) {
+  if (rugcheck) {
+    if (rugcheck.lpLockedPct === 0 && rugcheck.topHolderPct > 15) return "High";
+    if (rugcheck.risks.some((r) => r.name.toLowerCase().includes("rug")))
+      return "High";
+  }
   if (score >= 8) return "Low";
   if (score >= 6) return "Medium";
   return "High";
@@ -179,7 +184,7 @@ Top Holder: ${rugcheck?.topHolderPct.toFixed(2) || 0}%
 LP Locked: ${rugcheck?.lpLockedPct || 0}%
 Rugcheck Score: ${rugcheck?.score || 0}/100
 
-Provide in plain text only, no asterisks, no bold, no markdown:
+IMPORTANT: Reply in plain text only. Do NOT use asterisks, bold, headers, or any markdown formatting whatsoever. No ** or * characters anywhere in your response.
 1. Momentum: one sentence on signals
 2. Exit range: suggested target (e.g., 3x-5x or $100k-$150k mcap)
 3. Risk: one key risk to watch`;
@@ -206,7 +211,7 @@ Provide in plain text only, no asterisks, no bold, no markdown:
 
 async function sendAlert(token, rugcheck) {
   const score = scoreToken(token, rugcheck);
-  const risk = getRiskLevel(score);
+  const risk = getRiskLevel(score, rugcheck);
   const liquidity = token?.liquidity?.usd || 0;
   const platform = liquidity === 0 ? "Pump.fun" : "Raydium";
   const ageMs = Date.now() - (token?.pairCreatedAt || 0);
@@ -241,7 +246,7 @@ async function sendAlert(token, rugcheck) {
     "-----------------",
     "SAFETY",
     "Rugcheck Score: " + (rugcheck?.score || 0) + "/100",
-    "Rugcheck Score Rating: " + formatRisk(rugcheck?.score || 0),
+    // "Rugcheck Score Rating: " + formatRisk(rugcheck?.score || 0),
     "Total Holders: " + (rugcheck?.totalHolders || 0),
     "Top Holder: " + (rugcheck?.topHolderPct.toFixed(2) || 0) + "%",
     "LP Locked: " + (rugcheck?.lpLockedPct || 0) + "%",
@@ -266,7 +271,13 @@ async function sendAlert(token, rugcheck) {
   const subs = loadSubscribers();
   for (const chatId of subs) {
     try {
-      await bot.sendMessage(chatId, message);
+      await bot.sendMessage(chatId, message, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: " Copy Contract", copy_text: { text: contractAddr } }],
+          ],
+        },
+      });
     } catch (e) {
       console.error("Failed to send to " + chatId + ":", e.message);
     }
