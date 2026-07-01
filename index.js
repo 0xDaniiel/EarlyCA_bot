@@ -29,9 +29,20 @@ bot.onText(/\/subscribe/, (msg) => {
       WALLET_ADDRESS +
       "\n\nAccepted tokens: USDC, USDT, or SOL (Solana network only)\n\n" +
       "After paying, tap /verify to confirm your payment.",
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "  Copy Wallet Address",
+              copy_text: { text: WALLET_ADDRESS },
+            },
+          ],
+        ],
+      },
+    },
   );
 });
-
 bot.onText(/\/verify/, (msg) => {
   const chatId = msg.chat.id;
   pendingVerification.set(chatId, true);
@@ -74,7 +85,6 @@ bot.on("message", async (msg) => {
         "We found that transaction but it wasn't sent to our wallet. Please make sure you sent to the correct address.",
       );
     }
-
     // Check signature hasn't been used before
     const subs = loadSubscribers();
     const alreadyUsed = subs.some((s) => s.usedSignatures?.includes(signature));
@@ -85,9 +95,67 @@ bot.on("message", async (msg) => {
       );
     }
 
-    // Mark as subscribed for 30 days
+    let amountUSD = 0;
+    let paymentToken = null;
+
+    // Check USDC or USDT transfer
+    for (const ix of instructions) {
+      if (ix.program === "spl-token" && ix.parsed?.type === "transferChecked") {
+        const info = ix.parsed.info;
+        const mint = info?.mint;
+        const amount = parseFloat(info?.tokenAmount?.uiAmount || 0);
+        if (
+          (mint === process.env.USDC_MINT || mint === process.env.USDT_MINT) &&
+          accountKeys.includes(WALLET_ADDRESS)
+        ) {
+          amountUSD = amount;
+          paymentToken = mint === process.env.USDC_MINT ? "USDC" : "USDT";
+          break;
+        }
+      }
+    }
+
+    // Check SOL transfer if no USDC/USDT found
+    if (!paymentToken) {
+      const solRes = await axios.get(
+        "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+      );
+      const solPrice = solRes.data?.solana?.usd || 0;
+      const preBalances = tx.meta?.preBalances || [];
+      const postBalances = tx.meta?.postBalances || [];
+      const walletIndex = accountKeys.indexOf(WALLET_ADDRESS);
+      if (walletIndex !== -1) {
+        const lamportsDiff =
+          postBalances[walletIndex] - preBalances[walletIndex];
+        if (lamportsDiff > 0) {
+          amountUSD = (lamportsDiff / 1e9) * solPrice;
+          paymentToken = "SOL";
+        }
+      }
+    }
+
+    if (!paymentToken) {
+      return bot.sendMessage(
+        chatId,
+        "We found that transaction but it doesn't match our payment details. Make sure you sent USDC, USDT, or SOL to " +
+          WALLET_ADDRESS,
+      );
+    }
+
+    if (amountUSD < 4.5) {
+      return bot.sendMessage(
+        chatId,
+        "We received $" +
+          amountUSD.toFixed(2) +
+          " " +
+          paymentToken +
+          " but the minimum is $5. Please send the remaining amount and verify again.",
+      );
+    }
+
+    const days = Math.floor((amountUSD / 5) * 30);
     const expiry = new Date();
-    expiry.setDate(expiry.getDate() + 30);
+    expiry.setDate(expiry.getDate() + days);
     const usedSignatures = getSubscriber(chatId)?.usedSignatures || [];
     updateSubscriber(chatId, {
       subscribed: true,
@@ -97,9 +165,24 @@ bot.on("message", async (msg) => {
 
     bot.sendMessage(
       chatId,
-      "Payment verified! You are now subscribed for 30 days. Enjoy your alerts!",
+      "Payment verified! Received $" +
+        amountUSD.toFixed(2) +
+        " " +
+        paymentToken +
+        ".\n\nYou are now subscribed for " +
+        days +
+        " days. Enjoy your alerts!",
     );
-    sendAdminAlert("New subscriber: " + chatId + " | Tx: " + signature);
+    sendAdminAlert(
+      "New subscriber: " +
+        chatId +
+        " | " +
+        amountUSD.toFixed(2) +
+        " " +
+        paymentToken +
+        " | Tx: " +
+        signature,
+    );
   } catch (e) {
     console.error("Verify error:", e.message);
     bot.sendMessage(
@@ -108,6 +191,7 @@ bot.on("message", async (msg) => {
     );
   }
 });
+
 const fs = require("fs");
 const SUBS_FILE = "./subscribers.json";
 
@@ -361,9 +445,9 @@ LP Locked: ${rugcheck?.lpLockedPct || 0}%
 Rugcheck Score: ${rugcheck?.score || 0}/100
 
 IMPORTANT: Reply in plain text only. Do NOT use asterisks, bold, headers, or any markdown formatting whatsoever. No ** or * characters anywhere in your response.
-1. Momentum: one sentence on signals
-2. Exit range: suggested target (e.g., 3x-5x or $100k-$150k mcap)
-3. Risk: one key risk to watch`;
+1. Momentum: one sentence on buying pressure and price action
+2. Exit range: suggested profit target (e.g., 2x-3x or $100k-$150k mcap)
+3. Verdict: WATCH or PASS with one reason why`;
 
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
@@ -463,7 +547,7 @@ async function sendAlert(token, rugcheck) {
             inline_keyboard: [
               [
                 {
-                  text: "📋 Copy Contract Address",
+                  text: "  Copy Contract Address",
                   copy_text: { text: contractAddr },
                 },
               ],
@@ -477,7 +561,7 @@ async function sendAlert(token, rugcheck) {
             inline_keyboard: [
               [
                 {
-                  text: "📋 Copy Contract Address",
+                  text: "  Copy Contract Address",
                   copy_text: { text: contractAddr },
                 },
               ],
@@ -503,7 +587,7 @@ async function sendAlert(token, rugcheck) {
         );
       }
     } catch (e) {
-      console.error("Failed to send to " + chatId + ":", e.message);
+      // console.error("Failed to send to " + chatId + ":", e.message);
     }
   }
 }
@@ -522,18 +606,18 @@ async function scan() {
           alerted.add(id);
           const rugcheck = await getRugcheckData(token.tokenAddress);
           await sendAlert(token, rugcheck);
-          console.log("Alert sent for $" + token.baseToken?.symbol);
+          // console.log("Alert sent for $" + token.baseToken?.symbol);
         }
       } catch (e) {
-        console.error("Error processing token:", e.message);
+        // console.error("Error processing token:", e.message);
         await sendAdminAlert("Error processing token: " + e.message);
       }
     }
-    console.log(
-      "Done. " + tokens.length + " checked, " + passed + " alerts sent.",
-    );
+    // console.log(
+    //   "Done. " + tokens.length + " checked, " + passed + " alerts sent.",
+    // );
   } catch (e) {
-    console.error("Scan failed:", e.message);
+    // console.error("Scan failed:", e.message);
     await sendAdminAlert("Scan failed: " + e.message);
   }
 }
