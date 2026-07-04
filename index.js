@@ -578,7 +578,14 @@ async function sendAlert(token, rugcheck) {
           );
         }
       } else {
-        // Trial exhausted — send payment prompt once
+        // Trial exhausted — notify once at exactly 70, then silence
+        if (sub.alertCount === 70) {
+          await bot.sendMessage(
+            chatId,
+            "Your 70 free alerts have been used up.\n\nTap /subscribe to continue receiving alerts for $5/month.",
+          );
+          updateSubscriber(chatId, { alertCount: 71 });
+        }
         continue;
       }
     } catch (e) {
