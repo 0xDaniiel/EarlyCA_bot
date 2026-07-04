@@ -15,7 +15,7 @@ bot.onText(/\/start/, (msg) => {
   addSubscriber(chatId);
   bot.sendMessage(
     chatId,
-    "Welcome to EarlyCA Bot! You have 30 free alerts to try the service.\n\nAfter that, subscribe for $5/month to continue receiving alerts.\n\nTap /subscribe when ready to upgrade.",
+    "Welcome to EarlyCA Bot! You have 70 free alerts to try the service.\n\nAfter that, subscribe for $5/month to continue receiving alerts.\n\nTap /subscribe when ready to upgrade.",
   );
 });
 
@@ -447,7 +447,7 @@ Rugcheck Score: ${rugcheck?.score || 0}/100
 IMPORTANT: Reply in plain text only. Do NOT use asterisks, bold, headers, or any markdown formatting whatsoever. No ** or * characters anywhere in your response.
 1. Momentum: one sentence on buying pressure and price action
 2. Exit range: suggested profit target (e.g., 2x-3x or $100k-$150k mcap)
-3. Verdict: WATCH or PASS with one reason why`;
+3. Signal: BUY, WAIT, or SKIP with one reason why`;
 
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
@@ -554,7 +554,7 @@ async function sendAlert(token, rugcheck) {
             ],
           },
         });
-      } else if (sub.alertCount < 30) {
+      } else if (sub.alertCount < 70) {
         // Free trial — send and increment count
         await bot.sendMessage(chatId, message, {
           reply_markup: {
@@ -570,8 +570,8 @@ async function sendAlert(token, rugcheck) {
         });
         updateSubscriber(chatId, { alertCount: sub.alertCount + 1 });
 
-        // Warn at 25 alerts
-        if (sub.alertCount + 1 === 25) {
+        // Warn at 65 alerts
+        if (sub.alertCount + 1 === 65) {
           await bot.sendMessage(
             chatId,
             "You have 5 free alerts remaining. Subscribe to continue receiving alerts after your trial ends.",
@@ -579,12 +579,7 @@ async function sendAlert(token, rugcheck) {
         }
       } else {
         // Trial exhausted — send payment prompt once
-        await bot.sendMessage(
-          chatId,
-          "Your 30 free alerts have been used up.\n\nTo continue receiving alerts, subscribe for $5/month.\n\nSend $5 in USDC, USDT, or SOL to:\n\n" +
-            process.env.WALLET_ADDRESS +
-            "\n\nThen tap /verify to confirm your payment.",
-        );
+        continue;
       }
     } catch (e) {
       // console.error("Failed to send to " + chatId + ":", e.message);
