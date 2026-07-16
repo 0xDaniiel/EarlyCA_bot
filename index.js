@@ -481,7 +481,7 @@ Rugcheck Score: ${rugcheck?.score || 0}/100
 IMPORTANT: Reply in plain text only. Do NOT use asterisks, bold, headers, or any markdown formatting whatsoever. No ** or * characters anywhere in your response.
 1. Momentum: one sentence on buying pressure and price action
 2. Exit range: suggested profit target (e.g., 2x-3x or $100k-$150k mcap)
-3. Signal: BUY, WAIT, or SKIP with one reason why`;
+3. Outlook: BULLISH, NEUTRAL, or BEARISH with one reason why`;
 
     const message = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
