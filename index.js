@@ -215,7 +215,14 @@ function getSubscriber(chatId) {
 function addSubscriber(chatId) {
   const subs = loadSubscribers();
   if (!subs.find((s) => s.chatId === chatId)) {
-    subs.push({ chatId, alertCount: 0, subscribed: false, expiry: null });
+    // subs.push({ chatId, alertCount: 0, subscribed: false, expiry: null });
+    subs.push({
+      chatId,
+      alertCount: 0,
+      subscribed: false,
+      expiry: null,
+      lastReminderSent: null,
+    });
     saveSubscribers(subs);
   }
 }
@@ -428,6 +435,33 @@ async function sendAdminAlert(message) {
   }
 }
 
+async function sendReminders() {
+  const subs = loadSubscribers();
+  const now = new Date();
+  const fourDays = 4 * 24 * 60 * 60 * 1000;
+
+  for (const sub of subs) {
+    if (sub.subscribed) continue;
+    if (sub.alertCount < 71) continue;
+
+    const lastSent = sub.lastReminderSent
+      ? new Date(sub.lastReminderSent)
+      : null;
+    const shouldSend = !lastSent || now - lastSent >= fourDays;
+
+    if (shouldSend) {
+      try {
+        await bot.sendMessage(
+          sub.chatId,
+          "You're missing out on new Solana token alerts!\n\nSubscribe for $5/month to get back in.\n\nTap /subscribe to continue.",
+        );
+        updateSubscriber(sub.chatId, { lastReminderSent: now.toISOString() });
+      } catch (e) {
+        console.error("Reminder failed for " + sub.chatId + ":", e.message);
+      }
+    }
+  }
+}
 async function generateAnalysis(token, rugcheck) {
   try {
     const prompt = `You are a crypto memecoin analyst. Analyze this Solana token and provide a brief trading signal (2-3 sentences max).
@@ -623,7 +657,8 @@ async function scan() {
     await sendAdminAlert("Scan failed: " + e.message);
   }
 }
-
+sendReminders();
+setInterval(sendReminders, 6 * 60 * 60 * 1000); // check every 6 hours
 scan();
 setInterval(scan, 30000);
 console.log("Memecoin bot started with Claude AI...");
